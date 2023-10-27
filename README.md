@@ -11,6 +11,6 @@ export PATH
 ```
 ## Directory organization
 
-* [`library`](./library): libs.
-
-
+* [`example data`](./example_data): artificial example data for testing (from Case63 - Channel flow with IBM)
+* [`examples`](./examples): basic examples for testing
+* [`libs`](./libs): python libraries (for splines, compact differencing schemes, tlab standard output files
