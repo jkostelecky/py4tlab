@@ -13,6 +13,7 @@ from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 import netCDF4  as nc 
 import warnings; warnings.filterwarnings("ignore", category=DeprecationWarning) 
+import datetime
 
 """
 #############################################################################
@@ -501,7 +502,7 @@ class DnsOut:
                         out[i,j] = float(data_line[j+1])
                     i += 1
             else:
-                out = np.zeros((lin_out,col_out-1)) # skip second column with zeros
+                out = np.zeros((lin_out,col_out)) # skip second column with zeros
                 # split
                 i = 0
                 for line in dns_out_clean:
@@ -510,14 +511,39 @@ class DnsOut:
                     for j in range(1,col_out-1):
                         out[i,j] = float(data_line[j+1])
                     i += 1
+        if vlevel >= 2:
+            times = []
+            for i in range(lin_out):
+                date = str(out[i,0])
+                hour = int(date[:2])
+                mins = int(date[2:4])
+                secs = int(date[4:6])
+                mils = int(date[7:])
+                times.append(datetime.datetime(2000,1,1,hour,mins,secs,mils))
+            # get delta
+            delta_t = []
+            for i in range(lin_out-1):
+                dt = times[i+1] - times[i]
+                delta_t.append(dt.total_seconds())
+            # delta for one iteration
+            out[:-1,-1] = delta_t / np.diff(out[:,1])
+            out[-1,-1] = out[-2,-1]
         # stored variables
         list_print = []
         list_var   = []
-        if vlevel >= 2: list_print.append('timestamp (date)'); list_var.append('date')        
-        list_print.extend(['iteration_step (it)', 'time_total (time)','time_step (dt)', \
+        if vlevel >= 2: 
+            list_print.append('timestamp (date)'); list_var.append('date')
+        if fname == 'dns.out':        
+            list_print.extend(['iteration_step (it)', 'time_total (time)','time_step (dt)', \
                            'cfl_number (clf)','dif_number (dif)','visc  (visc)',        \
                            'dil_min  (dil_min)','dil_max (dilmax)'])
-        list_var.extend(['it', 'time','dt','cfl','dif','visc','dil_min','dil_max'])
+            list_var.extend(['it', 'time','dt','cfl','dif','visc','dil_min','dil_max'])
+        elif fname == 'dns.obs':
+            list_print.extend(['iteration_step', 'time_total','u_bulk','w_bulk','u_y(1)',\
+                               'w_y(1)','alpha(1)','alpha(ny)','entsrophy', 's1_y(1)'])
+            list_var.extend(['it','time' , 'ub','wb','uy1','wy1','al1','alny','ent','s1y'])
+        if vlevel >= 2: 
+            list_print.append('delta_t/iteration'); list_var.append('dt_it')
         # print
         i = 0
         for var in list_print:
