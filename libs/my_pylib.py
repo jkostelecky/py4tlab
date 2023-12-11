@@ -465,12 +465,16 @@ class InputParam:
 class DnsOut:
     def __init__(self, path, fname, vlevel=2): 
         # params
-        self.path = path
-        self.name = path + fname
-        self.data = dict()
+        self.path  = path
+        self.fname = fname
+        self.name  = self.path + self.fname
+        self.data  = dict()
+        self.vlevel = vlevel
+    def read_dnso(self):
         print("--------------------------------------------------")       
         print("Reading dns.out file      ...")
         # open dns.out file and process data
+        print(self.name)
         with open(self.name, 'r') as f:
             dns_out = f.readlines()
             dns_out = np.asanyarray(dns_out)
@@ -485,14 +489,17 @@ class DnsOut:
                     index_clean.append(i)
             j = 0
             index_clean = index_clean[::2]
-            for i in index_clean:
-                dns_out_clean = np.delete(dns_out_clean,range(i-j,i+3-j), axis=0)
-                j = j + 3
+            # clean_lines = 3
+            for i in index_clean: # avoid having doubles
+                if i == 0: clean_lines = 3
+                else: clean_lines = 4
+                dns_out_clean = np.delete(dns_out_clean,range(i-j,i+clean_lines-j), axis=0)
+                j = j + clean_lines
             # get array size
             col_out = len(dns_out_clean[0].split())
             lin_out = len(dns_out_clean)
             # data array
-            if vlevel < 2:
+            if self.vlevel < 2:
                 out = np.zeros((lin_out,col_out-1)) # skip first column with zeros
                 # split
                 i = 0
@@ -505,44 +512,59 @@ class DnsOut:
                 out = np.zeros((lin_out,col_out)) # skip second column with zeros
                 # split
                 i = 0
+                itime= []
                 for line in dns_out_clean:
                     data_line = line.split()
+                    itime.append(data_line[0][1:-1])
                     out[i,0] = float(data_line[0][1:-1])
                     for j in range(1,col_out-1):
                         out[i,j] = float(data_line[j+1])
                     i += 1
-        if vlevel >= 2:
+        if self.vlevel >= 2:
             times = []
+            # ini values
+            year = 2000; month = 1; day = 1; add_again = True
             for i in range(lin_out):
-                date = str(out[i,0])
+                date = itime[i]
                 hour = int(date[:2])
                 mins = int(date[2:4])
                 secs = int(date[4:6])
                 mils = int(date[7:])
-                times.append(datetime.datetime(2000,1,1,hour,mins,secs,mils))
+                # add day if zero o'clock
+                if date[0] == '0' and add_again: day += 1; add_again = False
+                if date[0] == '1' and not add_again: add_again = True # ready for next day
+                times.append(datetime.datetime(year,month,day,hour,mins,secs,mils))
             # get delta
             delta_t = []
             for i in range(lin_out-1):
                 dt = times[i+1] - times[i]
                 delta_t.append(dt.total_seconds())
-            # delta for one iteration
+            # delta for last iteration
             out[:-1,-1] = delta_t / np.diff(out[:,1])
-            out[-1,-1] = out[-2,-1]
+            out[-1,-1]  = out[-2,-1]
+            # correct concatenation - just copy values
+            ii = 4
+            restart_ind = []
+            for i in index_clean:
+                if i != 0:
+                    restart_ind.append(out[i-ii,1])
+                    out[i-ii,-1] = out[i-ii-1,-1]
+                    ii += 4
         # stored variables
         list_print = []
         list_var   = []
-        if vlevel >= 2: 
+        if self.vlevel >= 2: 
             list_print.append('timestamp (date)'); list_var.append('date')
-        if fname == 'dns.out':        
+        if self.fname[:7] == 'dns.out':        
             list_print.extend(['iteration_step (it)', 'time_total (time)','time_step (dt)', \
                            'cfl_number (clf)','dif_number (dif)','visc  (visc)',        \
                            'dil_min  (dil_min)','dil_max (dilmax)'])
             list_var.extend(['it', 'time','dt','cfl','dif','visc','dil_min','dil_max'])
-        elif fname == 'dns.obs':
+        elif self.fname[:7] == 'dns.obs':
             list_print.extend(['iteration_step', 'time_total','u_bulk','w_bulk','u_y(1)',\
                                'w_y(1)','alpha(1)','alpha(ny)','entsrophy', 's1_y(1)'])
             list_var.extend(['it','time' , 'ub','wb','uy1','wy1','al1','alny','ent','s1y'])
-        if vlevel >= 2: 
+        if self.vlevel >= 2: 
             list_print.append('delta_t/iteration'); list_var.append('dt_it')
         # print
         i = 0
@@ -551,7 +573,7 @@ class DnsOut:
             self.data[list_var[i]] = out[:,i]
             i += 1  
         del out, dns_out, dns_out_clean, f, line
-        return
+        return restart_ind
 #############################################################################
 #---------------------------------------------------------------------------#
 # process avg.nc files
